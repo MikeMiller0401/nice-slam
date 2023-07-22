@@ -45,8 +45,9 @@ class NICE_SLAM():
         os.makedirs(f'{self.output}/mesh', exist_ok=True)
         self.H, self.W, self.fx, self.fy, self.cx, self.cy = cfg['cam']['H'], cfg['cam'][
             'W'], cfg['cam']['fx'], cfg['cam']['fy'], cfg['cam']['cx'], cfg['cam']['cy']
-        self.update_cam()
+        self.update_cam()  # 重置相机内参
 
+        # 获取网络
         model = config.get_model(cfg,  nice=self.nice)
         self.shared_decoders = model
 
@@ -112,6 +113,7 @@ class NICE_SLAM():
 
     def update_cam(self):
         """
+        根据预处理配置更新相机内参
         Update the camera intrinsics according to pre-processing config, 
         such as resize or edge crop.
         """
@@ -304,7 +306,7 @@ class NICE_SLAM():
             p.start()
             processes.append(p)
         for p in processes:
-            p.join()
+            p.join()  # 并行执行三个函数
 
 
 # This part is required by torch.multiprocessing

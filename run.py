@@ -7,7 +7,6 @@ import torch
 from src import config
 from src.NICE_SLAM import NICE_SLAM
 
-
 def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -39,6 +38,7 @@ def main():
     slam = NICE_SLAM(cfg, args)
 
     slam.run()
+
 
 
 if __name__ == '__main__':

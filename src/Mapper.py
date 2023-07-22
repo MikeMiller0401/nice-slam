@@ -229,49 +229,53 @@ class Mapper(object):
 
     def optimize_map(self, num_joint_iters, lr_factor, idx, cur_gt_color, cur_gt_depth, gt_cur_c2w, keyframe_dict, keyframe_list, cur_c2w):
         """
+        建图的核心函数，用于对场景表示和相机姿态进行迭代优化
         Mapping iterations. Sample pixels from selected keyframes,
         then optimize scene representation and camera poses(if local BA enabled).
+        在每个关键帧上执行一定数量的迭代来优化场景表示和相机姿态
 
         Args:
-            num_joint_iters (int): number of mapping iterations.
-            lr_factor (float): the factor to times on current lr.
-            idx (int): the index of current frame
-            cur_gt_color (tensor): gt_color image of the current camera.
-            cur_gt_depth (tensor): gt_depth image of the current camera.
-            gt_cur_c2w (tensor): groundtruth camera to world matrix corresponding to current frame.
-            keyframe_dict (list): list of keyframes info dictionary.
-            keyframe_list (list): list ofkeyframe index.
-            cur_c2w (tensor): the estimated camera to world matrix of current frame. 
+            num_joint_iters (int): number of mapping iterations.  建图总迭代次数
+            lr_factor (float): the factor to times on current lr.  调整学习率的参数
+            idx (int): the index of current frame  当前帧的索引
+            cur_gt_color (tensor): gt_color image of the current camera.  当前帧的彩色图像gt
+            cur_gt_depth (tensor): gt_depth image of the current camera.  当前帧的深度图像gt
+            gt_cur_c2w (tensor): groundtruth camera to world matrix corresponding to current frame.  当前帧的相机外参的逆gt
+            keyframe_dict (list): list of keyframes info dictionary.  关键帧的字典
+            keyframe_list (list): list ofkeyframe index.  关键帧的索引
+            cur_c2w (tensor): the estimated camera to world matrix of current frame.  对当前帧的相机外参的逆的估值
 
         Returns:
-            cur_c2w/None (tensor/None): return the updated cur_c2w, return None if no BA
+            cur_c2w/None (tensor/None): return the updated cur_c2w, return None if no BA  根据优化后的结果更新cur_c2w（only BA）
         """
         H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
-        c = self.c
+        c = self.c  # c (dict): feature grids.
         cfg = self.cfg
         device = self.device
         bottom = torch.from_numpy(np.array([0, 0, 0, 1.]).reshape(
             [1, 4])).type(torch.float32).to(device)
 
+        """
+        检查keyframe_dict是否有关键帧，返回optimize_frame，待优化的关键帧的索引
+        """
+        print(keyframe_list)
         if len(keyframe_dict) == 0:
             optimize_frame = []
-        else:
-            if self.keyframe_selection_method == 'global':
+        else:  # 建图的关键帧选择，默认overlap，
+            if self.keyframe_selection_method == 'global':  # 从关键帧中随机选择几帧作为优化帧
                 num = self.mapping_window_size-2
                 optimize_frame = random_select(len(self.keyframe_dict)-1, num)
-            elif self.keyframe_selection_method == 'overlap':
+            elif self.keyframe_selection_method == 'overlap':  # 从关键帧中选择与当前帧有重叠的帧作为优化帧，函数：keyframe_selection_overlap
                 num = self.mapping_window_size-2
                 optimize_frame = self.keyframe_selection_overlap(
                     cur_gt_color, cur_gt_depth, cur_c2w, keyframe_dict[:-1], num)
-
-        # add the last keyframe and the current frame(use -1 to denote)
+        # add the last keyframe and the current frame(use -1 to denote)  添加最后一个关键帧和当前帧
         oldest_frame = None
-        if len(keyframe_list) > 0:
+        if len(keyframe_list) > 0:  # 如果keyframe_list列表中有关键帧，获取oldest_frame
             optimize_frame = optimize_frame + [len(keyframe_list)-1]
             oldest_frame = min(optimize_frame)
-        optimize_frame += [-1]
-
-        if self.save_selected_keyframes_info:
+        optimize_frame += [-1]  # 将索引为-1的特殊值（表示当前帧）添加到optimize_frame列表的末尾
+        if self.save_selected_keyframes_info:  # 是否保存关键帧信息，默认False
             keyframes_info = []
             for id, frame in enumerate(optimize_frame):
                 if frame != -1:
@@ -286,8 +290,12 @@ class Mapper(object):
                     {'idx': frame_idx, 'gt_c2w': tmp_gt_c2w, 'est_c2w': tmp_est_c2w})
             self.selected_keyframes[idx] = keyframes_info
 
+        # 计算了每个优化帧上要采样的像素数pixs_per_image = 建图过程中总共要采样的像素数 / 优化帧的数量
         pixs_per_image = self.mapping_pixels//len(optimize_frame)
 
+        """
+        设置要优化的参数
+        """
         decoders_para_list = []
         coarse_grid_para = []
         middle_grid_para = []
@@ -295,7 +303,7 @@ class Mapper(object):
         color_grid_para = []
         gt_depth_np = cur_gt_depth.cpu().numpy()
         if self.nice:
-            if self.frustum_feature_selection:
+            if self.frustum_feature_selection:  # True
                 masked_c_grad = {}
                 mask_c2w = cur_c2w
             for key, val in c.items():
@@ -318,11 +326,14 @@ class Mapper(object):
                         0).unsqueeze(0).repeat(1, val.shape[1], 1, 1, 1)
                     val = val.to(device)
                     # val_grad is the optimizable part, other parameters will be fixed
+                    # 提取出优化参数val_grad
                     val_grad = val[mask].clone()
                     val_grad = Variable(val_grad.to(
                         device), requires_grad=True)
                     masked_c_grad[key] = val_grad
                     masked_c_grad[key+'mask'] = mask
+
+                    # 向不同级别的网格参数添加优化参数
                     if key == 'grid_coarse':
                         coarse_grid_para.append(val_grad)
                     elif key == 'grid_middle':
@@ -344,9 +355,15 @@ class Mapper(object):
             decoders_para_list += list(self.decoders.parameters())
 
         if self.BA:
+            """
+            这段代码负责在启用了Bundle Adjustment(BA)的情况下，为优化相机c2w准备所需的张量camera_tensor_list & gt_camera_tensor_list，
+            并获取关键帧的c2w和对应的gt_c2w。
+            这些张量将用于在优化过程中c2w，并避免由于漂移等因素引起的错误。
+            """
             camera_tensor_list = []
             gt_camera_tensor_list = []
             for frame in optimize_frame:
+                # 对首帧的c2w和gt_c2w进行估计，其他帧则直接从keyframe_dict中获取
                 # the oldest frame should be fixed to avoid drifting
                 if frame != oldest_frame:
                     if frame != -1:
@@ -355,15 +372,20 @@ class Mapper(object):
                     else:
                         c2w = cur_c2w
                         gt_c2w = gt_cur_c2w
-                    camera_tensor = get_tensor_from_camera(c2w)
+
+                    camera_tensor = get_tensor_from_camera(c2w)  # 将估计出的c2w转换为张量形式
                     camera_tensor = Variable(
-                        camera_tensor.to(device), requires_grad=True)
-                    camera_tensor_list.append(camera_tensor)
-                    gt_camera_tensor = get_tensor_from_camera(gt_c2w)
-                    gt_camera_tensor_list.append(gt_camera_tensor)
+                        camera_tensor.to(device), requires_grad=True)   # 待优化
+                    camera_tensor_list.append(camera_tensor)  # 加入list
+
+                    gt_camera_tensor = get_tensor_from_camera(gt_c2w)  # # 将真实的c2w转换为张量形式
+                    gt_camera_tensor_list.append(gt_camera_tensor)  # 加入list
 
         if self.nice:
             if self.BA:
+                """
+                在使用nice-slam和启用BA的情况下，向优化器添加优化参数
+                """
                 # The corresponding lr will be set according to which stage the optimization is in
                 optimizer = torch.optim.Adam([{'params': decoders_para_list, 'lr': 0},
                                               {'params': coarse_grid_para, 'lr': 0},
@@ -479,6 +501,8 @@ class Mapper(object):
                 batch_rays_o = batch_rays_o[inside_mask]
                 batch_gt_depth = batch_gt_depth[inside_mask]
                 batch_gt_color = batch_gt_color[inside_mask]
+
+            # 获取深度、不确定性和颜色的预测值。 Renderer.py -> class Render() -> def render_batch_ray()
             ret = self.renderer.render_batch_ray(c, self.decoders, batch_rays_d,
                                                  batch_rays_o, device, self.stage,
                                                  gt_depth=None if self.coarse_mapper else batch_gt_depth)
@@ -541,7 +565,7 @@ class Mapper(object):
 
     def run(self):
         cfg = self.cfg
-        idx, gt_color, gt_depth, gt_c2w = self.frame_reader[0]
+        idx, gt_color, gt_depth, gt_c2w = self.frame_reader[0]  # 获取第0帧的索引、真实颜色、真实深度、真实相机外参的逆
 
         self.estimate_c2w_list[0] = gt_c2w.cpu()
         init = True
@@ -569,7 +593,7 @@ class Mapper(object):
                 print(prefix+"Mapping Frame ", idx.item())
                 print(Style.RESET_ALL)
 
-            _, gt_color, gt_depth, gt_c2w = self.frame_reader[idx]
+            _, gt_color, gt_depth, gt_c2w = self.frame_reader[idx]  # 获取当前帧的图像数据
 
             if not init:
                 lr_factor = cfg['mapping']['lr_factor']

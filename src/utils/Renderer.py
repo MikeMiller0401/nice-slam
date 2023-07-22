@@ -3,7 +3,7 @@ from src.common import get_rays, raw2outputs_nerf_color, sample_pdf
 
 
 class Renderer(object):
-    def __init__(self, cfg, args, slam, points_batch_size=500000, ray_batch_size=100000):
+    def __init__(self, cfg, args, slam, points_batch_size=100000, ray_batch_size=20000):  # 原始代码：points_batch_size=500000, ray_batch_size=100000
         self.ray_batch_size = ray_batch_size
         self.points_batch_size = points_batch_size
 
@@ -65,10 +65,10 @@ class Renderer(object):
         Render color, depth and uncertainty of a batch of rays.
 
         Args:
-            c (dict): feature grids.
-            decoders (nn.module): decoders.
-            rays_d (tensor, N*3): rays direction.
-            rays_o (tensor, N*3): rays origin.
+            c (dict): feature grids. 特征网格
+            decoders (nn.module): decoders.  解码器
+            rays_d (tensor, N*3): rays direction.  ray的方向
+            rays_o (tensor, N*3): rays origin.  ray的原点
             device (str): device name to compute on.
             stage (str): query stage.
             gt_depth (tensor, optional): sensor depth image. Defaults to None.
