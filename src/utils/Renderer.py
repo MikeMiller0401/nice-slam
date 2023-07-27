@@ -3,7 +3,7 @@ from src.common import get_rays, raw2outputs_nerf_color, sample_pdf
 
 
 class Renderer(object):
-    def __init__(self, cfg, args, slam, points_batch_size=100000, ray_batch_size=20000):  # 原始代码：points_batch_size=500000, ray_batch_size=100000
+    def __init__(self, cfg, args, slam, points_batch_size=500000, ray_batch_size=100000):
         self.ray_batch_size = ray_batch_size
         self.points_batch_size = points_batch_size
 

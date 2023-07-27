@@ -258,7 +258,6 @@ class Mapper(object):
         """
         检查keyframe_dict是否有关键帧，返回optimize_frame，待优化的关键帧的索引
         """
-        print(keyframe_list)
         if len(keyframe_dict) == 0:
             optimize_frame = []
         else:  # 建图的关键帧选择，默认overlap，
@@ -564,6 +563,7 @@ class Mapper(object):
             return None
 
     def run(self):
+        print("Mapper.py_def run()")
         cfg = self.cfg
         idx, gt_color, gt_depth, gt_c2w = self.frame_reader[0]  # 获取第0帧的索引、真实颜色、真实深度、真实相机外参的逆
 

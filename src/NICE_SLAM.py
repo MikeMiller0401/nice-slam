@@ -45,14 +45,17 @@ class NICE_SLAM():
         os.makedirs(f'{self.output}/mesh', exist_ok=True)
         self.H, self.W, self.fx, self.fy, self.cx, self.cy = cfg['cam']['H'], cfg['cam'][
             'W'], cfg['cam']['fx'], cfg['cam']['fy'], cfg['cam']['cx'], cfg['cam']['cy']
+        print("NICE-SLAM.py: 重置相机内参")
         self.update_cam()  # 重置相机内参
 
         # 获取网络
+        print("NICE-SLAM.py: 获取网络")
         model = config.get_model(cfg,  nice=self.nice)
         self.shared_decoders = model
 
         self.scale = cfg['scale']
 
+        print("NICE-SLAM.py: 初始化多层特征网格")
         self.load_bound(cfg)  # 加载场景边界参数（bound）并将其传递给不同的解码器（decoders）和当前对象（self）
         if self.nice:
             self.load_pretrain(cfg)  # 加载预训练的ConvOnet模型权重参数到解码器（decoders）中
@@ -66,9 +69,11 @@ class NICE_SLAM():
         except RuntimeError:
             pass
 
+        print("NICE-SLAM.py: 载入数据集")
         self.frame_reader = get_dataset(cfg, args, self.scale)  # 载入数据集
         self.n_img = len(self.frame_reader)  # 计算数据集中图片的数量
 
+        print("NICE-SLAM.py: 初始化列表")
         self.estimate_c2w_list = torch.zeros((self.n_img, 4, 4))  # 创建了一个 self.n_img * 4 * 4 的 tensor： estimate_c2w_list
         self.estimate_c2w_list.share_memory_()  # 将c2w的估计值列表 estimate_c2w_list 设置为共享内存
 
@@ -105,6 +110,7 @@ class NICE_SLAM():
         if self.coarse:
             self.coarse_mapper = Mapper(cfg, args, self, coarse_mapper=True) # 初始化 coarse mapper
         self.tracker = Tracker(cfg, args, self)  # 初始化 tracker
+        print("NICE-SLAM.py: 打印配置信息")
         self.print_output_desc()  # 打印配置信息
 
     def print_output_desc(self):  # 打印配置信息
@@ -140,8 +146,6 @@ class NICE_SLAM():
             self.cy = sy*self.cy
             self.W = crop_size[1]
             self.H = crop_size[0]
-        else:
-            print("crop_size:False 不需要对图像进行裁切")
 
         # croping will change H, W, cx, cy, so need to change here
         if self.cfg['cam']['crop_edge'] > 0:
@@ -150,8 +154,6 @@ class NICE_SLAM():
             self.W -= self.cfg['cam']['crop_edge']*2
             self.cx -= self.cfg['cam']['crop_edge']
             self.cy -= self.cfg['cam']['crop_edge']
-        else:
-            print("crop_edge = 0  不需要对图像边缘进行裁切")
 
     def load_bound(self, cfg):
         """
@@ -325,16 +327,20 @@ class NICE_SLAM():
         processes = []
         for rank in range(3):
             if rank == 0:
+                print("tracking")
                 p = mp.Process(target=self.tracking, args=(rank, ))
             elif rank == 1:
+                print("mapping")
                 p = mp.Process(target=self.mapping, args=(rank, ))
             elif rank == 2:
                 if self.coarse:
+                    print("coarse_mapping")
                     p = mp.Process(target=self.coarse_mapping, args=(rank, ))
                 else:
                     continue
             p.start()
             processes.append(p)
+
         for p in processes:
             p.join()  # 并行执行三个函数
 

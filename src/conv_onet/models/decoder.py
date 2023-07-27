@@ -91,20 +91,21 @@ class Same(nn.Module):
 class MLP(nn.Module):
     """
     Decoder. Point coordinates not only used in sampling the feature grids, but also as MLP input.
+    解码器
 
     Args:
-        name (str): name of this decoder.
+        name (str): name of this decoder.  模型的名称，用于标识不同的解码器
         dim (int): input dimension.
         c_dim (int): feature dimension.
         hidden_size (int): hidden size of Decoder network.
-        n_blocks (int): number of layers.
+        n_blocks (int): number of layers.  MLP层数
         leaky (bool): whether to use leaky ReLUs.
         sample_mode (str): sampling feature strategy, bilinear|nearest.
         color (bool): whether or not to output color.
-        skips (list): list of layers to have skip connections.
-        grid_len (float): voxel length of its corresponding feature grid.
+        skips (list): list of layers to have skip connections.  在哪些层进行跳跃连接
+        grid_len (float): voxel length of its corresponding feature grid.  特征网格的体素长度
         pos_embedding_method (str): positional embedding method.
-        concat_feature (bool): whether to get feature from middle level and concat to the current feature.
+        concat_feature (bool): whether to get feature from middle level and concat to the current feature.  是否将来自中间网格的特征与当前特征进行拼接
     """
 
     def __init__(self, name='', dim=3, c_dim=128,
@@ -120,11 +121,13 @@ class MLP(nn.Module):
         self.n_blocks = n_blocks
         self.skips = skips
 
+        # 每个线性层的输入维度为c_dim，输出维度为hidden_size，总共n_blocks层
         if c_dim != 0:
             self.fc_c = nn.ModuleList([
                 nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
             ])
 
+        # 不同的位姿编码方法
         if pos_embedding_method == 'fourier':
             embedding_size = 93
             self.embedder = GaussianFourierFeatureTransform(
@@ -146,11 +149,13 @@ class MLP(nn.Module):
             embedding_size = 93
             self.embedder = DenseLayer(dim, embedding_size, activation='relu')
 
+        # 构建MLP网络的隐藏层， n_blocks 表示MLP的层数， skips 表示在哪些层进行跳跃连接
         self.pts_linears = nn.ModuleList(
             [DenseLayer(embedding_size, hidden_size, activation="relu")] +
             [DenseLayer(hidden_size, hidden_size, activation="relu") if i not in self.skips
              else DenseLayer(hidden_size + embedding_size, hidden_size, activation="relu") for i in range(n_blocks-1)])
 
+        # 根据是否输出颜色来决定 DenseLayer 隐藏层的维度
         if self.color:
             self.output_linear = DenseLayer(
                 hidden_size, 4, activation="linear")
@@ -165,6 +170,7 @@ class MLP(nn.Module):
 
         self.sample_mode = sample_mode
 
+    # 从特征网格中获取特征
     def sample_grid_feature(self, p, c):
         p_nor = normalize_3d_coordinate(p.clone(), self.bound)
         p_nor = p_nor.unsqueeze(0)
@@ -276,18 +282,18 @@ class MLP_no_xyz(nn.Module):
 
 class NICE(nn.Module):
     """    
-    Neural Implicit Scalable Encoding.
+    Neural Implicit Scalable Encoding.  神经隐式可扩展编码
 
     Args:
-        dim (int): input dimension.
-        c_dim (int): feature dimension.
-        coarse_grid_len (float): voxel length in coarse grid.
-        middle_grid_len (float): voxel length in middle grid.
-        fine_grid_len (float): voxel length in fine grid.
-        color_grid_len (float): voxel length in color grid.
-        hidden_size (int): hidden size of decoder network
-        coarse (bool): whether or not to use coarse level.
-        pos_embedding_method (str): positional embedding method.
+        dim (int): input dimension.  输入维度
+        c_dim (int): feature dimension. 特征维度
+        coarse_grid_len (float): voxel length in coarse grid.  粗糙级网格体素长度
+        middle_grid_len (float): voxel length in middle grid.  中间级网格体素长度
+        fine_grid_len (float): voxel length in fine grid.  精细级网格体素长度
+        color_grid_len (float): voxel length in color grid.  颜色网格体素长度
+        hidden_size (int): hidden size of decoder network  解码器隐藏层大小
+        coarse (bool): whether or not to use coarse level.  是否使用粗糙级网格
+        pos_embedding_method (str): positional embedding method.  位置编码方法
     """
 
     def __init__(self, dim=3, c_dim=32,

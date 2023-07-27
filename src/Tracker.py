@@ -147,6 +147,7 @@ class Tracker(object):
             self.prev_mapping_idx = self.mapping_idx[0].clone()
 
     def run(self):
+        print("Tracker.py_def run()")
         device = self.device
         self.c = {}
         if self.verbose:
