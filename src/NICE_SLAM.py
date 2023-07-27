@@ -72,6 +72,7 @@ class NICE_SLAM():
         print("NICE-SLAM.py: 载入数据集")
         self.frame_reader = get_dataset(cfg, args, self.scale)  # 载入数据集
         self.n_img = len(self.frame_reader)  # 计算数据集中图片的数量
+        print("NICE-SLAM.py: {}".format(self.n_img))
 
         print("NICE-SLAM.py: 初始化列表")
         self.estimate_c2w_list = torch.zeros((self.n_img, 4, 4))  # 创建了一个 self.n_img * 4 * 4 的 tensor： estimate_c2w_list

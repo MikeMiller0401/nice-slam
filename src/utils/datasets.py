@@ -75,7 +75,6 @@ class BaseDataset(Dataset):
         return self.n_img
 
     def __getitem__(self, index):
-
         color_path = self.color_paths[index]
         depth_path = self.depth_paths[index]
         color_data = cv2.imread(color_path)
